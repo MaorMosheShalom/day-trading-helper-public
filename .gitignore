@@ -1,0 +1,23 @@
+# market data is never committed (vendor terms) - see DATA.md
+data/raw/
+data/archive/
+data/import/
+
+# generated output
+results/
+reports/
+*.log
+
+# private production plans and per-machine settings / credentials
+dth/private/
+settings_local.txt
+*.key
+.env
+
+# python / OS
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+Thumbs.db
+.DS_Store
