@@ -99,11 +99,12 @@ def _print_events(label, evs):
               flush=True)
 
 
-def _pictures(traders: dict, days=None):
-    """The LIVE picture book (scripts/trade_book.py live_update) - never allowed to stop the trading."""
+def _pictures(traders: dict, days=None, backfill: bool = False):
+    """The LIVE picture book (scripts/trade_book.py live_update) - never allowed to stop the trading. backfill=True
+    (once at every start) also draws trades closed by an older version that didn't keep the picture details."""
     try:
         import trade_book
-        trade_book.live_update(traders, days)
+        trade_book.live_update(traders, days, backfill=backfill)
     except Exception as e:
         print(f"  (pictures failed: {type(e).__name__}: {e})", flush=True)
 
@@ -149,7 +150,7 @@ def catch_up_all(traders: dict, main_plan: str, d: date, now: int):
                 raise
     for t in traders.values():
         t.save()
-    _pictures(traders)
+    _pictures(traders, backfill=True)
 
 
 def catch_up_only():

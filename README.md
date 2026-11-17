@@ -127,7 +127,7 @@ flowchart LR
 
 ```bash
 pip install -r requirements.txt
-python -m pytest                                   # 22 tests on synthetic data, ~5 s
+python -m pytest                                   # 23 tests on synthetic data, ~5 s
 
 python scripts/make_sample_data.py                 # synthetic ES/NQ 1-minute bars -> data/raw/
 python scripts/autotrade.py --replay-day 2025-04-15   # a stored day through the live trader: must print IDENTICAL

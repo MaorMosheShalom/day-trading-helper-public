@@ -140,3 +140,22 @@ def test_month_page_lists_every_trade_as_text(tmp_path):
     assert page.count("<tr class='trade") == n                       # all 25 rows, as text
     assert "setup 25" in page and "id='q'" in page                    # the last trade + the search box
     assert page.count("class='trade sec'") == 19                      # a picture section for each trade with a picture
+
+
+def test_start_draws_trades_closed_by_the_old_version(tmp_path, monkeypatch):
+    """Trades closed by a version that didn't keep the picture details (the first demo day) get their picture at the
+    next start (the catch-up replays that day from the stored bars)."""
+    import autotrade as AT
+    import trade_book as TB
+    monkeypatch.setattr(TB, "LIVE", tmp_path / "LIVE")
+    monkeypatch.setattr(TB, "share", lambda root: None)
+    days = days_of(D2)
+    tr = trader(tmp_path, "old")
+    tr.run_until(D2, RTH_CLOSE, days)
+    assert tr.state.acc.trades
+    for t in tr.state.acc.trades:                                     # what the old version saved
+        for k in ("t_in", "t_out", "entry", "stop", "target", "exit", "R", "dist", "bal_before", "risk_pct", "atr"):
+            t.pop(k, None)
+    AT.catch_up_all({system.LIVE_PLAN: tr}, system.LIVE_PLAN, D2, RTH_CLOSE)
+    pics = [p for p in (tmp_path / "LIVE").rglob("*.png") if not p.name.startswith("_")]
+    assert len(pics) == len(tr.state.acc.trades)
