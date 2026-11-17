@@ -330,6 +330,65 @@ def build_plan(plan: str, start: date, end: date, root: Path, live: bool, worker
 
 
 # ---------------------------------------------------------------------------------------------------- summaries
+MONTH_COLS = ["#", "date", "symbol", "strategy", "side", "entry time", "entry", "stop", "target", "exit time", "exit",
+              "exit reason", "micros", "risk $", "risk %", "result", "$", "R", "balance after", "event"]
+
+
+def _cell(col, v) -> str:
+    if v is None or (isinstance(v, float) and v != v) or v == "":
+        return "-"
+    if col == "$":
+        return f"{'+' if v >= 0 else '-'}${abs(v):,.0f}"
+    if col in ("risk $", "balance after"):
+        return f"${v:,.0f}"
+    if col == "risk %":
+        return f"{v:.1f}%"
+    return str(v)
+
+
+def month_html(m: pd.DataFrame, name: str, title: str, head: str, month_usd: str, tot: float, sub: str) -> str:
+    """The month page: everything is text (searchable, Ctrl+F works) except the graphs and the trade pictures.
+    A table of ALL the month's trades (each row jumps to its picture), then every trade's text line + picture."""
+    e = html.escape
+    cols = [c for c in MONTH_COLS if c in m.columns]
+    rows, secs = [], []
+    for r in m.to_dict("records"):
+        cls = "g" if r["$"] > 0 else ("r" if r["$"] < 0 else "")
+        txt = {c: _cell(c, r.get(c)) for c in cols}
+        pic = r.get("picture") or ""
+        first = f"<a href='#t{r['#']}'>{e(txt['#'])}</a>" if pic else e(txt["#"])
+        rows.append(f"<tr class='trade {cls}'><td>{first}</td>"
+                    + "".join(f"<td>{e(txt[c])}</td>" for c in cols[1:]) + "</tr>")
+        if pic:
+            line = (f"{txt['date']} | {txt['symbol']} | {txt['strategy']} | {txt['side']} | in {txt['entry time']} at "
+                    f"{txt['entry']} | stop {txt['stop']} | target {txt['target']} | out {txt['exit time']} at "
+                    f"{txt['exit']} ({txt['exit reason']}) | {txt['micros']} micros | risk {txt['risk $']} "
+                    f"({txt['risk %']}) | {txt['result']} {txt['$']} ({txt['R']} R) | balance after "
+                    f"{txt['balance after']}" + (f" | {txt['event']}" if txt["event"] != "-" else ""))
+            secs.append(f"<div class='trade sec' id='t{r['#']}'><h3>{e(Path(pic).stem)}</h3><p class='{cls}'>{e(line)}"
+                        f" &nbsp; <a href='#list'>back to the list</a></p><img loading='lazy' src='{quote(Path(pic).name)}'"
+                        f" alt='{e(Path(pic).stem)}'></div>")
+    css = ("body{font-family:Segoe UI,Arial;margin:16px;background:#fafafa;color:#222}img{max-width:100%;"
+           "border:1px solid #ccc;margin-bottom:8px}table{border-collapse:collapse;font-size:13px;margin:12px 0 28px}"
+           "td,th{border:1px solid #ccc;padding:3px 6px;white-space:nowrap}th{background:#eef;position:sticky;top:0}"
+           "tr.g td{background:#eefbf1}tr.r td{background:#fdf0ef}p.g{color:#1a7f37}p.r{color:#b42318}"
+           ".big{font-size:26px;font-weight:bold}.big.g{color:#1a7f37}.big.r{color:#b42318}"
+           "#q{font-size:16px;padding:6px 10px;width:420px;max-width:90%}.sec{margin-bottom:28px}")
+    js = ("function f(){var q=document.getElementById('q').value.toLowerCase().split(' ').filter(Boolean),n=0;"
+          "document.querySelectorAll('.trade').forEach(function(x){var ok=q.every(function(w){"
+          "return x.textContent.toLowerCase().indexOf(w)>=0});x.style.display=ok?'':'none';"
+          "if(ok&&x.tagName=='TR')n++});document.getElementById('n').textContent=n}")
+    return (f"<!doctype html><meta charset='utf-8'><title>{e(name)} {e(title)}</title><style>{css}</style>"
+            f"<h1>{e(name)} - {e(title)}</h1><p><b>{e(head)}</b></p>"
+            f"<p class='big {'g' if tot >= 0 else 'r'}'>{e(month_usd)}</p><p>{e(sub)}</p>"
+            f"<img src='_month.png' alt='graphs: balance after each trade, $ per trade'>"
+            f"<h2 id='list'>All {len(m)} trades</h2><p><input id='q' oninput='f()' placeholder='Search: e.g. "
+            f"LOSS, SHORT, opening drive, 2024-03-12, +$1' autofocus> <span id='n'>{len(m)}</span> shown "
+            f"(words must all match; Ctrl+F also works)</p>"
+            f"<table><tr>{''.join(f'<th>{e(c)}</th>' for c in cols)}</tr>{''.join(rows)}</table>"
+            f"<h2>Every trade with its picture</h2>{''.join(secs)}<script>{js}</script>")
+
+
 def summaries(t: pd.DataFrame, log: pd.DataFrame, skipped: dict, base: Path, name: str, root: Path):
     import matplotlib
     matplotlib.use("Agg")
@@ -346,16 +405,18 @@ def summaries(t: pd.DataFrame, log: pd.DataFrame, skipped: dict, base: Path, nam
         ev = log[(log.month == mth) & log.event.isin(["case bought", "case LOST", "TEST PASSED", "PAYOUT"])] if len(log) else log
         sk = sum(v for d, v in skipped.items() if f"{d:%Y-%m}" == mth)
         wins, losses = int((m["$"] > 0).sum()), int((m["$"] < 0).sum())
-        fig = plt.figure(figsize=(14, 8.2), dpi=80)
-        gs = fig.add_gridspec(2, 2, height_ratios=[1.2, 1], left=0.06, right=0.98, top=0.86, bottom=0.04, hspace=0.3)
         tot = m["$"].sum()
-        fig.text(0.06, 0.95, f"{name}  |  {MONTHS[int(mth[5:])]} {y}  |  {len(m)} trades: {wins} wins, {losses} losses "
-                 f"({100 * wins / max(len(m), 1):.0f}% win)", fontsize=15, weight="bold")
-        fig.text(0.98, 0.94, f"MONTH {'+' if tot >= 0 else '-'}${abs(tot):,.0f}", fontsize=22, weight="bold",
-                 color="#1a7f37" if tot >= 0 else "#b42318", ha="right")
-        fig.text(0.06, 0.905, f"best +${m['$'].max():,.0f}  |  worst -${abs(m['$'].min()):,.0f}  |  signals skipped "
-                 f"because a trade was already open: {sk}  |  case events: "
-                 + (", ".join(f"{r.date:%d} {r.event}" for r in ev.itertuples()) if len(ev) else "none"), fontsize=10.5)
+        head = f"{name}  |  {MONTHS[int(mth[5:])]} {y}  |  {len(m)} trades: {wins} wins, {losses} losses " \
+               f"({100 * wins / max(len(m), 1):.0f}% win)"
+        month_usd = f"MONTH {'+' if tot >= 0 else '-'}${abs(tot):,.0f}"
+        events = ", ".join(f"{r.date:%d} {r.event}" for r in ev.itertuples()) if len(ev) else "none"
+        sub = f"best +${m['$'].max():,.0f}  |  worst -${abs(m['$'].min()):,.0f}  |  signals skipped " \
+              f"because a trade was already open: {sk}  |  case events: {events}"
+        fig = plt.figure(figsize=(14, 5.2), dpi=80)          # graphs only - the trade list is text in _month.html
+        gs = fig.add_gridspec(1, 2, left=0.06, right=0.98, top=0.80, bottom=0.10, wspace=0.18)
+        fig.text(0.06, 0.92, head, fontsize=15, weight="bold")
+        fig.text(0.98, 0.91, month_usd, fontsize=22, weight="bold", color="#1a7f37" if tot >= 0 else "#b42318", ha="right")
+        fig.text(0.06, 0.855, sub, fontsize=10.5)
         a1, a2 = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
         a1.plot(range(1, len(m) + 1), m["balance after"], marker="o", color="#1f6feb")
         a1.set_title("Case balance after each trade", fontsize=11, weight="bold")
@@ -365,25 +426,10 @@ def summaries(t: pd.DataFrame, log: pd.DataFrame, skipped: dict, base: Path, nam
         a2.set_title("$ per trade", fontsize=11, weight="bold")
         a2.grid(alpha=0.3, axis="y")
         a2.set_xlabel("trade # in the month")
-        ax = fig.add_subplot(gs[1, :])
-        ax.axis("off")
-        lines = [f"{'#':>5}  {'date':<10} {'sym':<3} {'strategy':<34} {'side':<5} {'in':>5} {'out':>5} {'risk $':>7} "
-                 f"{'result':<6} {'$':>8}  event"]
-        for r in m.head(16).to_dict("records"):
-            lines.append(f"{r['#']:>5}  {r['date']!s:<10} {r['symbol']:<3} {r['strategy'][:34]:<34} {r['side']:<5} "
-                         f"{r['entry time']:>5} {r['exit time']:>5} {r['risk $']:>7,} {r['result']:<6} {r['$']:>+8,}  {r['event']}")
-        if len(m) > 16:
-            lines.append(f"... and {len(m) - 16} more (see _month.csv / _month.html)")
-        ax.text(0, 1, "\n".join(lines), family="monospace", fontsize=8.6, va="top", transform=ax.transAxes)
         fig.savefig(mdir / "_month.png", dpi=80)
         plt.close(fig)
-        imgs = "\n".join(f'<h3>{html.escape(Path(p).stem)}</h3><img loading="lazy" src="{quote(Path(p).name)}">'
-                         for p in m.picture if p)
-        (mdir / "_month.html").write_text(
-            f"<!doctype html><meta charset='utf-8'><title>{html.escape(name)} {mth}</title>"
-            f"<style>body{{font-family:Segoe UI,Arial;margin:16px;background:#fafafa}}img{{max-width:100%;"
-            f"border:1px solid #ccc;margin-bottom:24px}}</style><h1>{html.escape(name)} - {MONTHS[int(mth[5:])]} {y}</h1>"
-            f"<img src='_month.png'>{imgs}", encoding="utf-8")
+        (mdir / "_month.html").write_text(month_html(m, name, f"{MONTHS[int(mth[5:])]} {y}", head, month_usd, tot, sub),
+                                          encoding="utf-8")
     for y, yt in t.groupby("year"):
         mo = yt.groupby("month")["$"].sum()
         fig, (a1, a2) = plt.subplots(1, 2, figsize=(14, 6), dpi=80)

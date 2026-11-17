@@ -13,6 +13,19 @@ The engine proves on every run that the three agree. The tool also simulates the
 account**: trailing drawdown, pass target, funded phase, payouts. It then measures a strategy by what it would earn
 under those rules, not by an equity curve with unlimited capital.
 
+> [!IMPORTANT]
+> **This public repository is only a sketch.** It shows the engine plus an example plan made of two textbook
+> strategies. The example plan is weak, has no proven edge, and should not be traded.
+>
+> **My private version is a much better tool:**
+> - it **places the orders by itself** on the broker account;
+> - it runs a production plan of carefully selected strategies;
+> - it is **backed by 7+ years of 1-minute ES / NQ data (2019-2026)**;
+> - it passed strict out-of-sample tests, coin-flip controls and stress tests.
+>
+> If you are interested in it, **contact me on LinkedIn:
+> [Maor Moshe Shalom](https://www.linkedin.com/in/maor-moshe-shalom-a961141b1)**.
+
 > Copyright (c) 2026 Maor Moshe Shalom. All rights reserved. This repository is published for **viewing only**. See
 > [LICENSE](LICENSE). Nothing here is financial advice.
 
@@ -114,7 +127,7 @@ flowchart LR
 
 ```bash
 pip install -r requirements.txt
-python -m pytest                                   # 21 tests on synthetic data, ~5 s
+python -m pytest                                   # 22 tests on synthetic data, ~5 s
 
 python scripts/make_sample_data.py                 # synthetic ES/NQ 1-minute bars -> data/raw/
 python scripts/autotrade.py --replay-day 2025-04-15   # a stored day through the live trader: must print IDENTICAL
@@ -160,11 +173,21 @@ tests/                        engine invariants, broker logic (fake account), re
 
 ## Status
 
-The production strategy plan is developed in a private repository, validated with the protocol above, and currently
-running as a forward paper test. This public repository contains the engine, the execution layer and an example plan
-built from two published strategies:
+This public repository is a **sketch**. It contains the engine, the execution layer and an example plan built from two
+published strategies:
 - Zarattini & Aziz (2023), opening-range breakout;
 - Gao, Han, Li & Zhou (2018), intraday momentum.
+
+The example plan only demonstrates the machinery and is not worth trading.
+
+The **private version** is developed in a private repository:
+- it trades by itself, placing and managing the orders on the broker account;
+- it runs a production plan of carefully selected strategies;
+- it was validated with the protocol above on 7+ years of 1-minute data (2019-2026);
+- it is currently running as a forward test.
+
+To ask about the private version, contact me on
+[LinkedIn](https://www.linkedin.com/in/maor-moshe-shalom-a961141b1).
 
 ---
 

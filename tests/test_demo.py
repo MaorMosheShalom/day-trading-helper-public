@@ -120,3 +120,23 @@ def test_stop_flag_keeps_it_stopped_today(tmp_path, monkeypatch):
     monkeypatch.setattr(AT.runner, "PaperTrader", lambda *a, **k: called.append(1))
     AT.live(None, True)
     assert called == []                                               # it didn't even open the paper case
+
+
+def test_month_page_lists_every_trade_as_text(tmp_path):
+    """A busy month: the month page has every trade as searchable text (not only the first rows in a picture)."""
+    import pandas as pd
+    import trade_book as TB
+    n = 25
+    t = pd.DataFrame([{"#": i, "date": date(2025, 3, 1 + i % 28), "month": "2025-03", "year": 2025, "symbol": "NQ",
+                       "strategy": f"setup {i}", "side": "LONG" if i % 2 else "SHORT", "entry time": "10:05",
+                       "entry": 100.0 + i, "stop": None, "target": float("nan"), "exit time": "11:00", "exit": 101.0,
+                       "exit reason": "time", "micros": 2, "risk $": 400, "risk %": 2.0,
+                       "result": "WIN" if i % 3 else "LOSS", "$": 50 if i % 3 else -40, "R": 0.5,
+                       "balance after": 50000 + i, "event": "", "picture": f"x/{i:04d} trade.png" if i < 20 else ""}
+                      for i in range(1, n + 1)])
+    TB.summaries(t, pd.DataFrame(), {}, tmp_path, "TEST", tmp_path)
+    page = next(tmp_path.rglob("_month.html")).read_text(encoding="utf-8")
+    assert (tmp_path / "2025" / "2025-03 March" / "_month.png").exists()
+    assert page.count("<tr class='trade") == n                       # all 25 rows, as text
+    assert "setup 25" in page and "id='q'" in page                    # the last trade + the search box
+    assert page.count("class='trade sec'") == 19                      # a picture section for each trade with a picture
